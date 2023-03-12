@@ -6,16 +6,7 @@ from sqlalchemy import UniqueConstraint
 from sqlalchemy import CheckConstraint
 from datetime import date
 # from app import db
-# db = SQLAlchemy()
-#----------------------------------------------------------------------------#
-# App Config.
-#----------------------------------------------------------------------------#
-
-app = Flask(__name__)
-moment = Moment(app)
-app.config.from_object('config')
-db = SQLAlchemy(app)
-migrate = Migrate(app,db)
+db = SQLAlchemy()
 
 # ----------------------------------------------------------------------------#
 # Models.
@@ -32,16 +23,10 @@ class Venue(db.Model):
   image_link = db.Column(db.String(500), nullable=False)
   facebook_link = db.Column(db.String(120), nullable=False)
   website = db.Column(db.String(120), nullable=False)
-  genres = db.Column(db.String(120), nullable=False)
+  genres = db.Column(db.ARRAY(db.String), nullable=False)
   seeking_description = db.Column(db.String, nullable=False)
   seeking_talent = db.Column(db.Boolean,nullable=False, default=False)
-  shows = db.relationship('Show', backref='venue', lazy=True)
-  
-  __table_args__ = (
-      UniqueConstraint('phone', name='unique_phone'),
-      CheckConstraint("phone ~ '^[0-9]+$'", name='phone_numbers_only'),
-      CheckConstraint("phone <> ''", name='non_empty_phone'),
-  )
+  shows = db.relationship('Show', backref='venue', lazy="joined", cascade="all, delete")
 
   def __repr__(self):
     return f'<Venue ID: {self.id}, name: {self.name}, city: {self.city}, state: {self.state}, address: {self.address}, phone: {self.phone}, image_link: {self.image_link}, facebook_link: {self.facebook_link}, website: {self.website}, genres: {self.genres}, seeking_description: {self.seeking_description}, seeking_talent: {self.seeking_talent}, shows: {self.shows}>'
@@ -55,7 +40,7 @@ class Artist(db.Model):
   city = db.Column(db.String(120), nullable=False)
   state = db.Column(db.String(120), nullable=False)
   phone = db.Column(db.String(120), nullable=False) #add some constrains 
-  genres = db.Column(db.String(120), nullable=False)
+  genres = db.Column(db.ARRAY(db.String), nullable=False)
   image_link = db.Column(db.String(500), nullable=False)
   facebook_link = db.Column(db.String(120), nullable=False)
 
@@ -63,7 +48,7 @@ class Artist(db.Model):
   website = db.Column(db.String(120), nullable=False)
   seeking_venue = db.Column(db.Boolean,nullable=False, default=False)
   seeking_description = db.Column(db.String, nullable=False)
-  shows = db.relationship('Show', backref='showlist', lazy=True)
+  shows = db.relationship('Show', backref='showlist', lazy="joined", cascade="all, delete")
   
   def __repr__(self):
     return f'<Artist ID: {self.id}, name: {self.name}, city: {self.city}, state: {self.state}, phone: {self.phone}, genres: {self.genres}, image_link: {self.image_link}, facebook_link: {self.facebook_link}, website: {self.website}, seeking_venue: {self.seeking_venue}, seeking_description: {self.seeking_description}, shows: {self.shows}>'
