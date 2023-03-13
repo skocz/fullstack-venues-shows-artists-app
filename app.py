@@ -2,7 +2,6 @@
 # Imports
 #----------------------------------------------------------------------------#
 
-import json
 import dateutil.parser
 import babel
 from flask import Flask, render_template, request, Response, flash, redirect, url_for
@@ -15,9 +14,9 @@ from flask_wtf import Form
 from forms import *
 from flask_migrate import Migrate
 from models import *
-import re
 from werkzeug.exceptions import abort
 from datetime import datetime
+from sqlalchemy.orm import relationship
 #----------------------------------------------------------------------------#
 # App Config.
 #----------------------------------------------------------------------------#
@@ -72,7 +71,6 @@ def venues():
         "id": venue.id,
         "name": venue.name, 
         "num_upcoming_shows": len(upcoming_shows)
-        # TODO: len(db.session.query(Show).filter(Show.venue_id==1).filter(Show.start_time>datetime.now()).all())
       })
 
     data.append({
@@ -108,7 +106,6 @@ def search_venues():
 @app.route('/venues/<int:venue_id>')
 def show_venue(venue_id):
   selected_venue = Venue.query.get_or_404(venue_id)
-
   # Get the shows for the selected venue and join with the Artist table
   shows = db.session.query(Show, Artist.name, Artist.image_link)\
     .join(Artist).filter(Show.venue_id == selected_venue.id)
@@ -148,68 +145,52 @@ def create_venue_form():
 
 @app.route('/venues/create', methods=['POST'])
 def create_venue_submission():
-  # form = VenueForm(request.form, meta={'csrf': False})
-  error = False
-  try:
-    name = request.form['name']
-    city = request.form['city']
-    state = request.form['state']
-    address = request.form['address']
-    phone = request.form['phone']
-    image_link = request.form['image_link']
-    facebook_link = request.form['facebook_link']
-    website = request.form['website_link']
-    genres = request.form.getlist('genres')
-    seeking_description = request.form['seeking_description']
-    seeking_talent = 'seeking_talent' in request.form
-    # Check phone number
-    if not re.match(r'^\d{3}-\d{3}-\d{4}$', phone):
-      raise ValueError('Invalid phone number')
-    
-    new_venue = Venue(
-      name=name,
-      city=city,
-      state=state,
-      address=address,
-      phone=phone,
-      genres=genres,
-      facebook_link=facebook_link,
-      image_link=image_link,
-      seeking_talent=seeking_talent,
-      website=website,
-      seeking_description=seeking_description
-    )
-    db.session.add(new_venue)
-    db.session.commit()
-    flash('Venue ' + request.form['name'] + ' was successfully listed!')
-    return redirect('/')
-  except ValueError as e:
-    error = True
-    db.session.rollback()
-    flash(str(e), 'error')
-  except:
-    error = True
-    db.session.rollback()
-    flash('An error occurred. Venue ' + request.form['name'] + ' could not be listed.', 'error')
-  finally:
-    db.session.close()
-  
-  if error:
-    flash('An error occurred. Venue ' + request.form['name'] + ' could not be listed.' , 'error')
-    abort(500)
-  else:
-    return render_template('pages/home.html')
+  # Set the FlaskForm
+  form = VenueForm(request.form, meta={'csrf': False})
+  # Validate all fields
+  if form.validate():
+    # Prepare for transaction
+    try:
+      venue = Venue(
+        name=form.name.data,
+        city=form.city.data,
+        state=form.state.data,
+        address=form.address.data,
+        phone = form.phone.data,
+        image_link = form.image_link.data,
+        facebook_link = form.facebook_link.data,
+        website = form.website_link.data,
+        genres=form.genres.data,
+        seeking_description = form.seeking_description.data,
+        seeking_talent=form.seeking_talent.data,   
+      )
 
-# https://stackoverflow.com/questions/33785415/deleting-a-file-on-server-by-delete-form-method
+      db.session.add(venue)
+      db.session.commit()
+    except ValueError as e:
+      print(e)
+      # If there is any error, roll back it
+      db.session.rollback()
+    finally:
+      db.session.close()
+
+    flash('Venue ' + request.form['name'] + ' was successfully listed!')
+    return render_template('pages/home.html')
+  # If there is any invalid field
+  else:
+    message = []
+    for field, errors in form.errors.items():
+      for error in errors:
+        message.append(f"{field}: {error}")
+    flash('Please fix the following errors: ' + ', '.join(message))
+    form = VenueForm()
+    return render_template('forms/new_venue.html', form=form)
+
 @app.route('/venues/<int:venue_id>/delete', methods=['POST'])
 def delete_venue(venue_id):
   error = False
   try:
     venue = Venue.query.get(venue_id)
-    # query.filter_by(id=venue_id).first()
-    # shows = Show.query.filter_by(venue_id=venue_id).all()
-    # for show in shows:
-    #   db.session.delete(show)
     db.session.delete(venue)
     db.session.commit()
   except:
@@ -220,11 +201,8 @@ def delete_venue(venue_id):
   if error:
     abort(500)
   else:
+    flash('Venue was successfully deleted!')
     return render_template('pages/home.html')
-
-  # BONUS CHALLENGE: Implement a button to delete a Venue on a Venue Page, have it so that
-  # clicking that button delete it from the db then redirect the user to the homepage
-  # return None
 
 #  Artists
 #  ----------------------------------------------------------------
@@ -302,18 +280,7 @@ def show_artist(artist_id):
 @app.route('/artists/<int:artist_id>/edit', methods=['GET'])
 def edit_artist(artist_id):
   artist = Artist.query.get(artist_id)
-  arrayGenres= []
-  lines = artist.genres.replace("}","").replace("{","").split(",")
-
-  for x in lines:
-    st = x.strip()
-    arrayGenres.append(st.replace('"',''))
-     
-
-  artist.genres = arrayGenres
-
   form = ArtistForm(obj=artist)
-  # form = ArtistForm(request.form, obj=artist)
   return render_template('forms/edit_artist.html', form=form, artist=artist)
 
 @app.route('/artists/<int:artist_id>/edit', methods=['POST'])
@@ -338,16 +305,6 @@ def edit_artist_submission(artist_id):
 @app.route('/venues/<int:venue_id>/edit', methods=['GET'])
 def edit_venue(venue_id):
   venue = Venue.query.get(venue_id)
-  
-  arrayGenres= []
-  lines = venue.genres.replace("}","").replace("{","").split(",")
-
-  for x in lines:
-    st = x.strip()
-    arrayGenres.append(st.replace('"',''))
-     
-
-  venue.genres = arrayGenres
   form = VenueForm(obj=venue)
   return render_template('forms/edit_venue.html', form=form, venue=venue)
 
@@ -380,42 +337,41 @@ def create_artist_form():
 
 @app.route('/artists/create', methods=['POST'])
 def create_artist_submission():
-  error = False
-  try:
-    name = request.form['name']
-    city = request.form['city']
-    state = request.form['state']
-    phone = request.form['phone']
-    genres = request.form.getlist('genres')
-    facebook_link = request.form['facebook_link']
-    image_link = request.form['image_link']
-    website = request.form['website_link']
-    seeking_venue = 'seeking_venue' in request.form
-    seeking_description = request.form['seeking_description']
-    # Check phone number
-    if not re.match(r'^\d{3}-\d{3}-\d{4}$', phone):
-      raise ValueError('Invalid phone number')
-    
-    new_artist = Artist(name=name, city=city, state=state, phone=phone, genres=genres,
-      facebook_link=facebook_link, image_link=image_link,
-      seeking_venue=seeking_venue, website=website,
-      seeking_description=seeking_description
-    )
-    db.session.add(new_artist)
-    db.session.commit()
-  except Exception as e:
-    db.session.rollback()
-    error = True
-    print(e)
-    flash('An error occurred. Artist ' + request.form['name'] + ' could not be listed.', 'error')
-  finally:
-    db.session.close()
-  if error:
-    abort(500)
-  else:
-    flash('Artist ' + request.form['name'] + ' was successfully listed!')
-    return redirect(url_for('index'))
+  form = ArtistForm(request.form, meta={"csrf": False})
+  if form.validate():
+    try:
+      artist = Artist(
+          name=form.name.data,
+          city=form.city.data,
+          state=form.state.data,
+          phone=form.phone.data,
+          genres=form.genres.data,
+          facebook_link=form.facebook_link.data,
+          image_link=form.image_link.data,
+          website=form.website_link.data,
+          seeking_venue=form.seeking_venue.data,
+          seeking_description=form.seeking_description.data
+        )
+      db.session.add(artist)
+      db.session.commit()
+    except ValueError as e:
+      print(e)
+      # If there is any error, roll back it
+      db.session.rollback()
+    finally:
+      db.session.close()
 
+    flash('Artist ' + form.name.data + ' was successfully listed!')
+    return render_template('pages/home.html')
+  # If there is any invalid field
+  else:
+    message = []
+    for field, errors in form.errors.items():
+      for error in errors:
+        message.append(f"{field}: {error}")
+    flash('Please fix the following errors: ' + ', '.join(message))
+    form = ArtistForm()
+    return render_template('forms/new_artist.html', form=form)
 
 #  Shows
 #  ----------------------------------------------------------------
@@ -448,37 +404,81 @@ def create_shows():
 
 @app.route('/shows/create', methods=['POST'])
 def create_show_submission():
-  error = False
-  artist_id = request.form['artist_id']
-  venue_id = request.form['venue_id']
-  start_time = request.form['start_time']
   
-  findArtist = db.session.query(Artist).filter_by(id=artist_id).first()
-  findVenue = db.session.query(Venue).filter_by(id=venue_id).first()
-  form = ShowForm(request.form)
+  form = ShowForm(request.form, meta={"csrf": False})
+  if form.validate():
+    try:
+      artist = Artist.query.get(form.artist_id.data)
+      venue = Venue.query.get(form.venue_id.data)
+      if not artist:
+        flash('Artist not found')
+        return render_template('forms/new_show.html', form=form)
+      if not venue:
+        flash('Venue not found')
+        return render_template('forms/new_show.html', form=form)
+      
+      show = Show(
+          artist_id=form.artist_id.data,
+          venue_id=form.venue_id.data,
+          start_time=form.start_time.data
+      )
+      db.session.add(show)
+      db.session.commit()
+    except ValueError as e:
+      print('e',e)
+      db.session.rollback()
+    finally:
+      db.session.close()
 
-  if not findArtist:
-    flash("The artist ID doesn't exists")
-    return render_template('pages/new_show.html', form=form)
-  if not findVenue: 
-    flash("The vanue ID doesn't exists")
-    return render_template('pages/new_show.html', form=form)
-
-  try:
-    new_show = Show( artist_id=artist_id, venue_id=venue_id, start_time=start_time)
-    db.session.add(new_show)
-    db.session.commit()
-  except:
-    db.session.rollback()
-    error = True
-  finally:
-    db.session.close()
     flash('Show was successfully listed!')
-  if error:
-    abort(500)
-    flash('An error occurred. Show could not be listed.')
+    return render_template('pages/home.html')
   else:
-    return render_template('pages/shows.html')
+    message = []
+    for field, errors in form.errors.items():
+      for error in errors:
+        message.append(f"{field}: {error}")
+    flash('Please fix the following errors: ' + ', '.join(message))
+    form = VenueForm()
+    return render_template('pages/shows.html', form=form)
+
+# result = db.session.query(Show).join(Artist).filter(Show.artist_id == item.id).filter(Show.start_time > datetime.now()).all()
+
+@app.route('/shows/search', methods=['POST'])
+def search_shows():
+  search_term = request.form.get('search_term', '')
+  shows = db.session.query(
+    Venue.name,
+    Artist.name,
+    Artist.image_link,
+    Show.start_time,
+    Show.artist_id,
+    Show.venue_id
+  ).join(
+    Show, Venue.id == Show.venue_id
+  ).join(
+    Artist, Artist.id == Show.artist_id
+  ).filter(
+    Artist.name.ilike('%'+search_term+'%') | Venue.name.ilike('%'+search_term+'%')
+  ).all()
+
+  results = []
+  for venue_name, artist_name, artist_image_link, start_time, artist_id, venue_id in shows:
+    results.append({
+      "artist_id": artist_id,
+      "artist_name": artist_name,
+      "artist_image_link": artist_image_link,
+      "venue_id": venue_id,
+      "venue_name": venue_name,
+      "start_time": format_datetime(start_time, format='medium')
+    })
+
+  response = {
+    "count": len(results),
+    "data": results
+  }
+ 
+  return render_template('pages/show.html', results=response, search_term=request.form.get('search_term', ''))
+
 
 @app.errorhandler(404)
 def not_found_error(error):

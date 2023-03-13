@@ -43,8 +43,6 @@ class Artist(db.Model):
   genres = db.Column(db.ARRAY(db.String), nullable=False)
   image_link = db.Column(db.String(500), nullable=False)
   facebook_link = db.Column(db.String(120), nullable=False)
-
-  # TODO: implement any missing fields, as a database migration using Flask-Migrate
   website = db.Column(db.String(120), nullable=False)
   seeking_venue = db.Column(db.Boolean,nullable=False, default=False)
   seeking_description = db.Column(db.String, nullable=False)
@@ -53,8 +51,6 @@ class Artist(db.Model):
   def __repr__(self):
     return f'<Artist ID: {self.id}, name: {self.name}, city: {self.city}, state: {self.state}, phone: {self.phone}, genres: {self.genres}, image_link: {self.image_link}, facebook_link: {self.facebook_link}, website: {self.website}, seeking_venue: {self.seeking_venue}, seeking_description: {self.seeking_description}, shows: {self.shows}>'
 
-
-# TODO Implement Show and Artist models, and complete all model relationships and properties, as a database migration.
 class Show(db.Model):
   __tablename__ = 'show'
 
@@ -66,7 +62,7 @@ class Show(db.Model):
   def __repr__(self):
     return f'<Show ID: {self.id}, venue_id: {self.venue_id}, artist_id: {self.artist_id}, start_time: {self.start_time}'
 
-#locations = db.Table('locations',
+# locations = db.Table('locations',
 #     db.Column('venue_id', db.Integer, db.ForeignKey('venue.id'), primary_key=True),
 #     db.Column('product_id', db.Integer, db.ForeignKey('product.id'), primary_key=True)
 # )
